@@ -1,6 +1,7 @@
 fastapi
 uvicorn
-google-api-python-client
+gspread
 google-auth
 google-auth-oauthlib
-pydantic
+google-auth-httplib2
+google-api-python-client

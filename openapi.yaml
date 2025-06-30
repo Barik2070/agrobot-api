@@ -1,36 +1,11 @@
 openapi: 3.0.0
 info:
-  title: AgroBot API
-  version: 1.0.0
-servers:
-  - url: https://your-server-url.com
+  title: Agrobot API
+  version: "1.0"
 paths:
-  /update:
-    post:
-      summary: Update or add client in Google Sheets
-      operationId: updateClient
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                edrpou:
-                  type: string
-                  description: ЄДРПОУ підприємства
-                name:
-                  type: string
-                  description: Назва підприємства
-                field:
-                  type: string
-                  description: Назва поля
-                new_value:
-                  type: string
-                  description: Значення
-                create_column_if_missing:
-                  type: boolean
-                  description: Створити поле, якщо відсутнє
+  /:
+    get:
+      summary: Root
       responses:
         '200':
-          description: OK
+          description: Success
