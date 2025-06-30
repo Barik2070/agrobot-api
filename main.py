@@ -1,56 +1,89 @@
-from fastapi import FastAPI
+
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 import os
+import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 app = FastAPI()
 
-SERVICE_ACCOUNT_FILE = "/etc/secrets/credentials.json"
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+# Кореневий маршрут для перевірки
+@app.get("/")
+def read_root():
+    return {"message": "Agrobot API is live"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+# Клас для структури запиту
 class UpdateRequest(BaseModel):
-    client_name: str
-    column: str
+    edrpou: str
+    field: str
     value: str
 
+# Google Sheets setup
+def connect_to_gsheet():
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+
+    credentials_path = "/etc/secrets/autonomous-time-462914-xxxxxx.json"
+    creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
+    client = gspread.authorize(creds)
+
+    sheet = client.open_by_key("ТУТ_ID_ТВОЄЇ_ТАБЛИЦІ").worksheet("База")
+    log_sheet = client.open_by_key("ТУТ_ID_ТВОЄЇ_ТАБЛИЦІ").worksheet("Лог")
+    return sheet, log_sheet
+
 @app.post("/update")
-def update_data(req: UpdateRequest):
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build('sheets', 'v4', credentials=credentials)
+def update_sheet(req: UpdateRequest):
+    sheet, log_sheet = connect_to_gsheet()
 
-    sheet_id = os.getenv("SHEET_ID")
-    sheet_range = 'Лист1!A1:Z1000'
-    sheet = service.spreadsheets()
+    data = sheet.get_all_records()
+    updated = False
 
-    # отримуємо наявні дані
-    result = sheet.values().get(spreadsheetId=sheet_id, range=sheet_range).execute()
-    values = result.get('values', [])
+    for idx, row in enumerate(data, start=2):
+        if str(row.get("ЄДРПОУ")) == req.edrpou:
+            if req.field not in row:
+                sheet.add_cols(1)
+                sheet.update_cell(1, len(row) + 2, req.field)
+            col_index = sheet.row_values(1).index(req.field) + 1
+            sheet.update_cell(idx, col_index, req.value)
+            updated = True
 
-    headers = values[0]
-    name_col = headers.index("Назва") if "Назва" in headers else None
-    if name_col is None:
-        return {"error": "Колонка 'Назва' не знайдена"}
-
-    row_index = -1
-    for i, row in enumerate(values[1:], start=2):
-        if len(row) > name_col and row[name_col].strip().lower() == req.client_name.strip().lower():
-            row_index = i
+            log_sheet.append_row([
+                str(datetime.datetime.now()),
+                "оновлення",
+                req.edrpou,
+                req.field,
+                req.value
+            ])
             break
 
-    if req.column not in headers:
-        return {"error": f"Колонка '{req.column}' не знайдена. Спочатку додайте її."}
+    if not updated:
+        headers = sheet.row_values(1)
+        new_row = [""] * len(headers)
+        try:
+            edrpou_index = headers.index("ЄДРПОУ")
+            field_index = headers.index(req.field)
+        except ValueError:
+            sheet.add_cols(1)
+            sheet.update_cell(1, len(headers) + 1, req.field)
+            field_index = len(headers)
+            headers.append(req.field)
+            new_row = [""] * len(headers)
+            edrpou_index = headers.index("ЄДРПОУ")
 
-    col_index = headers.index(req.column)
-    cell = chr(ord('A') + col_index) + str(row_index if row_index != -1 else len(values)+1)
+        new_row[edrpou_index] = req.edrpou
+        new_row[field_index] = req.value
+        sheet.append_row(new_row)
+        log_sheet.append_row([
+            str(datetime.datetime.now()),
+            "додавання",
+            req.edrpou,
+            req.field,
+            req.value
+        ])
 
-    # оновлюємо або додаємо новий рядок
-    sheet.values().update(
-        spreadsheetId=sheet_id,
-        range=f'Лист1!{cell}',
-        valueInputOption="USER_ENTERED",
-        body={"values": [[req.value]]}
-    ).execute()
-
-    return {"status": "updated", "cell": cell}
+    return {"status": "success"}
