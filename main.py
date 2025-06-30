@@ -1,81 +1,56 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from datetime import datetime
-import gspread
-from google.oauth2.service_account import Credentials
-
-CREDS_FILE = "credentials.json"
-SPREADSHEET_NAME = "База фермерів"
-SCOPE = ["https://www.googleapis.com/auth/spreadsheets"]
-
-creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPE)
-client = gspread.authorize(creds)
-sheet = client.open(SPREADSHEET_NAME).worksheet("База")
-log = client.open(SPREADSHEET_NAME).worksheet("Лог")
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import os
 
 app = FastAPI()
 
+SERVICE_ACCOUNT_FILE = "/etc/secrets/credentials.json"
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
 class UpdateRequest(BaseModel):
-    edrpou: str | None = None
-    name: str | None = None
-    field: str
-    new_value: str
-    create_column_if_missing: bool = False
+    client_name: str
+    column: str
+    value: str
 
 @app.post("/update")
-def update_client(req: UpdateRequest):
-    headers = sheet.row_values(1)
-    data = sheet.get_all_records()
-    row_idx = None
+def update_data(req: UpdateRequest):
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    service = build('sheets', 'v4', credentials=credentials)
 
-    for i, row in enumerate(data):
-        if req.edrpou and str(row.get("ЄДРПОУ", "")).strip() == req.edrpou:
-            row_idx = i + 2
+    sheet_id = os.getenv("SHEET_ID")
+    sheet_range = 'Лист1!A1:Z1000'
+    sheet = service.spreadsheets()
+
+    # отримуємо наявні дані
+    result = sheet.values().get(spreadsheetId=sheet_id, range=sheet_range).execute()
+    values = result.get('values', [])
+
+    headers = values[0]
+    name_col = headers.index("Назва") if "Назва" in headers else None
+    if name_col is None:
+        return {"error": "Колонка 'Назва' не знайдена"}
+
+    row_index = -1
+    for i, row in enumerate(values[1:], start=2):
+        if len(row) > name_col and row[name_col].strip().lower() == req.client_name.strip().lower():
+            row_index = i
             break
-        elif req.name and req.name.lower() in row.get("Назва", "").lower():
-            row_idx = i + 2
-            break
 
-    if req.field not in headers:
-        if req.create_column_if_missing:
-            sheet.update_cell(1, len(headers) + 1, req.field)
-            headers.append(req.field)
-        else:
-            return {
-                "status": "missing_field",
-                "message": f"Поле '{req.field}' не існує. Створити?",
-                "need_confirmation": True
-            }
+    if req.column not in headers:
+        return {"error": f"Колонка '{req.column}' не знайдена. Спочатку додайте її."}
 
-    if row_idx:
-        col_idx = headers.index(req.field) + 1
-        old_value = sheet.cell(row_idx, col_idx).value
-        sheet.update_cell(row_idx, col_idx, req.new_value)
-        log.append_row([
-            datetime.now().isoformat(),
-            "Оновлення",
-            req.edrpou or req.name,
-            req.field,
-            old_value,
-            req.new_value
-        ])
-        return {"status": "updated", "message": f"Поле '{req.field}' оновлено"}
+    col_index = headers.index(req.column)
+    cell = chr(ord('A') + col_index) + str(row_index if row_index != -1 else len(values)+1)
 
-    new_row = [''] * len(headers)
-    if "ЄДРПОУ" in headers and req.edrpou:
-        new_row[headers.index("ЄДРПОУ")] = req.edrpou
-    if "Назва" in headers and req.name:
-        new_row[headers.index("Назва")] = req.name
-    if req.field in headers:
-        new_row[headers.index(req.field)] = req.new_value
-    sheet.append_row(new_row)
+    # оновлюємо або додаємо новий рядок
+    sheet.values().update(
+        spreadsheetId=sheet_id,
+        range=f'Лист1!{cell}',
+        valueInputOption="USER_ENTERED",
+        body={"values": [[req.value]]}
+    ).execute()
 
-    log.append_row([
-        datetime.now().isoformat(),
-        "Додавання",
-        req.edrpou or req.name,
-        req.field,
-        "",
-        req.new_value
-    ])
-    return {"status": "added", "message": f"Новий клієнт додано з полем '{req.field}'"}
+    return {"status": "updated", "cell": cell}
