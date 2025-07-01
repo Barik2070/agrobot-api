@@ -10,6 +10,48 @@ servers:
   - url: https://agrobot-api-s8uz.onrender.com
 
 paths:
+/filter-farmers:
+    get:
+      summary: Повертає фермерів, відфільтрованих за областю та мінімальною площею
+      parameters:
+        - in: query
+          name: region
+          schema:
+            type: string
+          description: Область (регіон)
+        - in: query
+          name: min_area
+          schema:
+            type: integer
+          description: Мінімальна площа господарства
+      responses:
+        '200':
+          description: Список фермерів
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+
+  /farmer-names:
+    get:
+      summary: Повертає список унікальних імен фермерів
+      responses:
+        '200':
+          description: Список імен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  names:
+                    type: array
+                    items:
+                      type: string
   /add-farmer:
     post:
       operationId: addFarmer

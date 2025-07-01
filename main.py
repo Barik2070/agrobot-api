@@ -163,3 +163,32 @@ def feedback_insights():
         return {"insights": "Останні відповіді отримали високі оцінки — змін не потрібно."}
 
     return {"insights": lessons}
+
+
+@app.get("/filter-farmers")
+def filter_farmers(region: Optional[str] = None, min_area: Optional[int] = None):
+    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+    data = sheet.get_all_records()
+    filtered = []
+
+    for row in data:
+        if region and region.lower() not in str(row.get("Область", "")).lower():
+            continue
+        if min_area:
+            try:
+                area = int(row.get("Площа", 0))
+                if area < min_area:
+                    continue
+            except:
+                continue
+        filtered.append(row)
+
+    return {"results": filtered[:200]}  # обмеження на обсяг для GPT
+
+
+@app.get("/farmer-names")
+def get_farmer_names():
+    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+    data = sheet.get_all_records()
+    names = list(set(row.get("Назва") for row in data if row.get("Назва")))
+    return {"names": sorted(names)}
