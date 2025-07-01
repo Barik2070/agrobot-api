@@ -139,3 +139,27 @@ def feedback_summary():
         "Записів з потребою зміни логіки": len(needs_fix),
         "Останній фідбек": data[-1] if total else {}
     }
+
+@app.get("/feedback-insights")
+def feedback_insights():
+    try:
+        sheet = client.open_by_key(SHEET_ID).worksheet("GPT_Feedback")
+    except gspread.WorksheetNotFound:
+        raise HTTPException(status_code=404, detail="Аркуш GPT_Feedback не знайдено")
+
+    data = sheet.get_all_records()
+    if not data:
+        return {"insights": "Немає фідбеку для аналізу."}
+
+    lessons = []
+    for row in reversed(data[-10:]):
+        if row.get("Оцінка") in ("1", "2", "3") or str(row.get("Потреба змінити логіку?")).lower() == "так":
+            insight = f"❗ Помилка у відповіді: '{row.get('GPT_відповідь', '')[:60]}...'. Коментар: {row.get('Коментар', '')}"
+            if row.get("GPT_виправлення"):
+                insight += f" → Пропозиція: {row['GPT_виправлення']}"
+            lessons.append(insight)
+
+    if not lessons:
+        return {"insights": "Останні відповіді отримали високі оцінки — змін не потрібно."}
+
+    return {"insights": lessons}
