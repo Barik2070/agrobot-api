@@ -98,3 +98,44 @@ def log_change(action: str, name: str):
         log_sheet.append_row(["Час", "Дія", "Фермер"])
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_sheet.append_row([now, action, name])
+
+@app.post("/feedback")
+def save_feedback(feedback: dict):
+    try:
+        sheet = client.open_by_key(SHEET_ID).worksheet("GPT_Feedback")
+    except gspread.WorksheetNotFound:
+        sheet = client.open_by_key(SHEET_ID).add_worksheet(title="GPT_Feedback", rows="1000", cols="10")
+        sheet.append_row(["Дата", "Користувач", "Запит", "GPT_відповідь", "Коментар", "Оцінка", "Потреба змінити логіку?", "GPT_виправлення"])
+
+    values = [
+        str(datetime.datetime.now()),
+        feedback.get("user", ""),
+        feedback.get("prompt", ""),
+        feedback.get("response", ""),
+        feedback.get("comment", ""),
+        feedback.get("rating", ""),
+        feedback.get("needs_fix", ""),
+        feedback.get("correction", "")
+    ]
+    sheet.append_row(values)
+    return {"message": "Фідбек збережено"}
+
+
+@app.get("/feedback-summary")
+def feedback_summary():
+    try:
+        sheet = client.open_by_key(SHEET_ID).worksheet("GPT_Feedback")
+    except gspread.WorksheetNotFound:
+        raise HTTPException(status_code=404, detail="Аркуш GPT_Feedback не знайдено")
+
+    data = sheet.get_all_records()
+    total = len(data)
+    low_ratings = [r for r in data if str(r.get("Оцінка", "")) in ("1", "2", "3")]
+    needs_fix = [r for r in data if str(r.get("Потреба змінити логіку?")).lower() == "так"]
+
+    return {
+        "Всього фідбеків": total,
+        "Низька оцінка (1–3)": len(low_ratings),
+        "Записів з потребою зміни логіки": len(needs_fix),
+        "Останній фідбек": data[-1] if total else {}
+    }
