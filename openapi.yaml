@@ -1,134 +1,106 @@
+openapi: 3.0.0
+info:
+  title: Farmer CRM API
+  version: 1.0.0
+  description: |
+    Ти — GPT-асистент агрокомпанії. Маєш доступ до бази клієнтів у Google Таблиці через API.
+    Вмієш шукати, додавати, оновлювати фермерів, створювати колонки та формувати зведення по регіонах.
+
+servers:
+  - url: https://agrobot-api-s8uz.onrender.com
+
+paths:
+  /add-farmer:
+    post:
+      operationId: addFarmer
+      summary: Додати нового фермера
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Farmer'
+      responses:
+        "200":
+          description: Фермера додано
+        "400":
+          description: Фермер уже існує
+
+  /update-farmer:
+    post:
+      operationId: updateFarmer
+      summary: Оновити дані фермера
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Farmer'
+      responses:
+        "200":
+          description: Дані оновлено
+        "404":
+          description: Фермера не знайдено
+
+  /find-farmer:
+    get:
+      operationId: findFarmer
+      summary: Знайти фермера за назвою
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Результати пошуку
+
+  /summary:
+    get:
+      operationId: getSummary
+      summary: Отримати зведення по регіонах
+      responses:
+        "200":
+          description: Зведення по регіонах
+
+  /add-column:
+    post:
+      operationId: addColumn
+      summary: Додати нову колонку
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                column_name:
+                  type: string
+      responses:
+        "200":
+          description: Колонку додано
+
 components:
   schemas:
     Farmer:
+      type: object
       properties:
-        Культура:
-          type: string
-        Місяць:
-          type: string
         Назва:
           type: string
         Область:
           type: string
         Площа:
           type: integer
-        Потреба:
-          type: string
-        Примітка:
+        Культура:
           type: string
         Телефон:
           type: string
-      required:
-      - Назва
-      type: object
-info:
-  description: 'Ти — ШІ-асистент агрокомпанії. Маєш доступ до бази клієнтів у Google
-    Таблиці через API (FastAPI).
-
-
-    📌 Можеш:
-
-    - Знайти фермера за ім’ям (/find-farmer)
-
-    - Надати коротке зведення по областях (/summary)
-
-    - Додати нового фермера до бази (/add-farmer)
-
-    - Оновити існуючого фермера (/update-farmer)
-
-    - Запропонувати створити нову колонку (/add-column)
-
-    - Вести лог змін
-
-
-    📦 База зберігається у Google Sheets з листом "База". Якщо потрібно, можеш створити
-    нову колонку або аркуш "Лог".
-
-
-    🎯 Приклад запиту:
-
-    "Фермер Василь із Черкаської області має 2000 га кукурудзи, шукає MAP у вересні.
-    Телефон: 0501112233."
-
-
-    🔍 Твоя дія:
-
-    - Якщо такого фермера немає — додай
-
-    - Якщо є — онови, додавши інформацію
-
-    - Якщо немає колонки "Місяць потреби" — запропонуй створити
-
-    - Якщо щось змінюєш — запиши у лог
-
-
-    📎 Усі API-запити відбуваються через FastAPI, розгорнутий на Render.
-
-    '
-  title: Farmer CRM API
-  version: 1.0.1
-openapi: 3.0.0
-paths:
-  /add-column:
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              properties:
-                column_name:
-                  type: string
-              type: object
-        required: true
-      responses:
-        '200':
-          description: Колонку додано
-      summary: Додати нову колонку
-  /add-farmer:
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Farmer'
-        required: true
-      responses:
-        '200':
-          description: Фермера додано
-        '400':
-          description: Фермер уже існує
-      summary: Додати нового фермера
-  /find-farmer:
-    get:
-      parameters:
-      - in: query
-        name: name
-        required: true
-        schema:
+        Потреба:
           type: string
-      responses:
-        '200':
-          description: Результати пошуку
-      summary: Пошук фермера за назвою
-  /summary:
-    get:
-      responses:
-        '200':
-          description: Кількість фермерів по областях
-      summary: Зведення по регіонах
-  /update-farmer:
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Farmer'
-        required: true
-      responses:
-        '200':
-          description: Дані оновлено
-        '404':
-          description: Фермера не знайдено
-      summary: Оновити дані фермера
-servers:
-- url: https://agrobot-api-s8uz.onrender.com
+        Місяць:
+          type: string
+        Примітка:
+          type: string
+      required:
+        - Назва
