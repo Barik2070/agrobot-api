@@ -1,53 +1,21 @@
 openapi: 3.1.0
 info:
-  title: AgroGPT API
-  version: "1.0"
+  title: Farmer CRM API
+  version: 1.0.0
+  description: 'GPT-асистент агрокомпанії для роботи з базою клієнтів у Google Таблиці
+    через API.
+
+    Підтримує додавання, оновлення, пошук фермерів, зведення по регіонах, створення
+    колонок.
+
+    '
 servers:
-  - url: https://agrobot-api-s8uz.onrender.com
+- url: https://agrobot-api-s8uz.onrender.com
 paths:
-  /:
-    get:
-      summary: Перевірка статусу API
-      operationId: root_get
-      responses:
-        '200':
-          description: API is running
-
-  /test-gsheet:
-    get:
-      summary: Тест з'єднання з Google Sheets
-      operationId: test_gsheet
-      responses:
-        '200':
-          description: First row of the sheet
-
-  /find-farmer:
-    get:
-      summary: Знайти фермера за іменем
-      operationId: find_farmer
-      parameters:
-        - in: query
-          name: name
-          schema:
-            type: string
-          required: true
-          description: Ім’я фермера
-      responses:
-        '200':
-          description: Результати пошуку
-
-  /summary:
-    get:
-      summary: Зведення по кількості фермерів по регіонах
-      operationId: summarize
-      responses:
-        '200':
-          description: Статистика по регіонах
-
   /add-farmer:
     post:
+      operationId: addFarmer
       summary: Додати нового фермера
-      operationId: add_farmer
       requestBody:
         required: true
         content:
@@ -57,11 +25,12 @@ paths:
       responses:
         '200':
           description: Фермера додано
-
+        '400':
+          description: Фермер уже існує
   /update-farmer:
     post:
-      summary: Оновити існуючого фермера
-      operationId: update_farmer
+      operationId: updateFarmer
+      summary: Оновити дані фермера
       requestBody:
         required: true
         content:
@@ -70,77 +39,45 @@ paths:
               $ref: '#/components/schemas/Farmer'
       responses:
         '200':
-          description: Фермера оновлено
-
-  /add-column:
-    post:
-      summary: Додати нову колонку
-      operationId: add_column
+          description: Дані оновлено
+        '404':
+          description: Фермера не знайдено
+  /find-farmer:
+    get:
+      operationId: findFarmer
+      summary: Знайти фермера за назвою
       parameters:
-        - in: query
-          name: column_name
-          required: true
-          schema:
-            type: string
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: string
       responses:
         '200':
-          description: Колонку додано
-
-  /feedback:
+          description: Результати пошуку
+  /summary:
+    get:
+      operationId: getSummary
+      summary: Отримати зведення по регіонах
+      responses:
+        '200':
+          description: Зведення по регіонах
+  /add-column:
     post:
-      summary: Зберегти фідбек користувача
-      operationId: save_feedback
+      operationId: addColumn
+      summary: Додати нову колонку
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              properties:
+                column_name:
+                  type: string
       responses:
         '200':
-          description: Фідбек збережено
-
-  /feedback-summary:
-    get:
-      summary: Отримати статистику фідбеку
-      operationId: feedback_summary
-      responses:
-        '200':
-          description: Зведення по фідбеку
-
-  /feedback-insights:
-    get:
-      summary: Уроки з фідбеку для GPT
-      operationId: feedback_insights
-      responses:
-        '200':
-          description: Інсайти для самонавчання GPT
-
-  /filter-farmers:
-    get:
-      summary: Фільтрація фермерів за регіоном і площею
-      operationId: filter_farmers
-      parameters:
-        - in: query
-          name: region
-          schema:
-            type: string
-        - in: query
-          name: min_area
-          schema:
-            type: integer
-      responses:
-        '200':
-          description: Відфільтровані фермери
-
-  /farmer-names:
-    get:
-      summary: Отримати список імен фермерів
-      operationId: get_farmer_names
-      responses:
-        '200':
-          description: Імена фермерів
-
+          description: Колонку додано
 components:
   schemas:
     Farmer:
@@ -162,3 +99,5 @@ components:
           type: string
         Примітка:
           type: string
+      required:
+      - Назва
