@@ -13,5 +13,5 @@ def test_gsheet():
     scopes = ['https://www.googleapis.com/auth/spreadsheets']
     creds = Credentials.from_service_account_file('/etc/secrets/credentials.json', scopes=scopes)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key("1akbF7aSVo4uJVQd0fFppHFm23xrAEi_s41Do2Ki-oTo").worksheet("База")
+    sheet = client.open_by_key("1akbF7aSVo4uJVQdOFfPpHfM23xrAEi_s41Do2Ki-oTo").worksheet("База")
     return {"first_row": sheet.row_values(1)}
