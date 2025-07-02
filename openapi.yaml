@@ -1,7 +1,27 @@
-openapi: 3.1.0
+components:
+  schemas:
+    Farmer:
+      properties:
+        Культура:
+          type: string
+        Місяць:
+          type: string
+        Назва:
+          type: string
+        Область:
+          type: string
+        Площа:
+          type: integer
+        Потреба:
+          type: string
+        Примітка:
+          type: string
+        Телефон:
+          type: string
+      required:
+      - Назва
+      type: object
 info:
-  title: Farmer CRM API
-  version: 1.0.0
   description: 'GPT-асистент агрокомпанії для роботи з базою клієнтів у Google Таблиці
     через API.
 
@@ -9,95 +29,105 @@ info:
     колонок.
 
     '
-servers:
-- url: https://agrobot-api-s8uz.onrender.com
+  title: Farmer CRM API
+  version: 1.0.0
+openapi: 3.1.0
 paths:
+  /add-column:
+    post:
+      operationId: addColumn
+      parameters:
+      - description: Назва нової колонки
+        in: query
+        name: column_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Колонку додано
+      summary: Додати нову колонку до таблиці
   /add-farmer:
     post:
       operationId: addFarmer
-      summary: Додати нового фермера
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Farmer'
+        required: true
       responses:
         '200':
           description: Фермера додано
         '400':
           description: Фермер уже існує
-  /update-farmer:
-    post:
-      operationId: updateFarmer
-      summary: Оновити дані фермера
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Farmer'
+      summary: Додати нового фермера
+  /farmer-names:
+    get:
+      operationId: getFarmerNames
       responses:
         '200':
-          description: Дані оновлено
-        '404':
-          description: Фермера не знайдено
+          description: Повертає список назв
+      summary: Отримати список імен фермерів
+  /feedback-insights:
+    get:
+      operationId: getFeedbackInsights
+      responses:
+        '200':
+          description: Інсайти враховано
+      summary: Інсайти з фідбеку користувачів
+  /filter-farmers:
+    get:
+      operationId: filterFarmers
+      parameters:
+      - in: query
+        name: region
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: min_area
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Фермери знайдені
+      summary: Фільтрувати фермерів за регіоном та площею
   /find-farmer:
     get:
       operationId: findFarmer
-      summary: Знайти фермера за назвою
       parameters:
-      - name: name
-        in: query
+      - in: query
+        name: name
         required: true
         schema:
           type: string
       responses:
         '200':
           description: Результати пошуку
+      summary: Знайти фермера за назвою
   /summary:
     get:
       operationId: getSummary
-      summary: Отримати зведення по регіонах
       responses:
         '200':
           description: Зведення по регіонах
-  /add-column:
+      summary: Отримати зведення по регіонах
+  /update-farmer:
     post:
-      operationId: addColumn
-      summary: Додати нову колонку
+      operationId: updateFarmer
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                column_name:
-                  type: string
+              $ref: '#/components/schemas/Farmer'
+        required: true
       responses:
         '200':
-          description: Колонку додано
-components:
-  schemas:
-    Farmer:
-      type: object
-      properties:
-        Назва:
-          type: string
-        Область:
-          type: string
-        Площа:
-          type: integer
-        Культура:
-          type: string
-        Телефон:
-          type: string
-        Потреба:
-          type: string
-        Місяць:
-          type: string
-        Примітка:
-          type: string
-      required:
-      - Назва
+          description: Дані оновлено
+        '404':
+          description: Фермера не знайдено
+      summary: Оновити дані фермера
+servers:
+- url: https://agrobot-api-s8uz.onrender.com
