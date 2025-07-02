@@ -31,6 +31,20 @@ def log_change(action: str, name: str):
 
 
 
+
+def ensure_columns_exist(sheet, required_columns):
+    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
+    updated = False
+    for col in required_columns:
+        if col not in headers:
+            sheet.add_cols(1)
+            sheet.update_cell(1, len(headers) + 1, col)
+            headers.append(col)
+            updated = True
+    return headers
+
+
 # Pydantic модель
 class Farmer(BaseModel):
     Назва: str
@@ -101,10 +115,12 @@ def add_farmer(farmer: Farmer):
     for row in data:
         if farmer.Назва.lower() == row.get("Назва", "").lower():
             raise HTTPException(status_code=400, detail="Фермер уже існує")
-    headers = sheet.row_values(1)
+    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
     new_row = [getattr(farmer, col, "") for col in headers]
     sheet.append_row(new_row)
-    headers = sheet.row_values(1)
+    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
     row_index = len(sheet.get_all_values())
     if farmer.Контакти:
         add_contacts(sheet, headers, row_index, farmer.Контакти)
@@ -115,13 +131,15 @@ def add_farmer(farmer: Farmer):
 def update_farmer(farmer: Farmer):
     sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
     data = sheet.get_all_records()
-    headers = sheet.row_values(1)
+    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
     for i, row in enumerate(data):
         if farmer.Назва.lower() == row.get("Назва", "").lower():
             for j, col in enumerate(headers):
                 if hasattr(farmer, col) and getattr(farmer, col):
                     sheet.update_cell(i + 2, j + 1, getattr(farmer, col))
-            headers = sheet.row_values(1)
+            required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
             if farmer.Контакти:
                 add_contacts(sheet, headers, i+2, farmer.Контакти)
             log_change("Оновлено", farmer.Назва)
@@ -131,7 +149,8 @@ def update_farmer(farmer: Farmer):
 @app.post("/add-column")
 def add_column(column_name: str):
     sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    headers = sheet.row_values(1)
+    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
+    headers = ensure_columns_exist(sheet, required_fields)
     if column_name in headers:
         return {"message": f"Колонка '{column_name}' вже існує"}
     try:

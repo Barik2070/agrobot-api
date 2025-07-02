@@ -3,5 +3,14 @@ services:
     name: agrobot-api
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "bash start.sh"
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/credentials.json
+    secrets:
+      - source: credentials.json
+        target: /etc/secrets/credentials.json
+    autoDeploy: true
+    healthCheckPath: /test-gsheet
+    region: frankfurt
