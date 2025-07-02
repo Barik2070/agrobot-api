@@ -16,6 +16,21 @@ scopes = ['https://www.googleapis.com/auth/spreadsheets']
 creds = Credentials.from_service_account_file('/etc/secrets/credentials.json', scopes=scopes)
 client = gspread.authorize(creds)
 
+def log_change(action: str, name: str):
+    try:
+        log_sheet = client.open_by_key(SHEET_ID).worksheet("Лог")
+    except Exception:
+        # Якщо аркуша "Лог" немає — створюємо його
+        spreadsheet = client.open_by_key(SHEET_ID)
+        spreadsheet.add_worksheet(title="Лог", rows=1000, cols=5)
+        log_sheet = spreadsheet.worksheet("Лог")
+        log_sheet.append_row(["Час", "Дія", "Фермер"])
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_sheet.append_row([now, action, name])
+
+
+
 # Pydantic модель
 class Farmer(BaseModel):
     Назва: str
