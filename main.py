@@ -41,6 +41,32 @@ class Farmer(BaseModel):
     Потреба: Optional[str] = ""
     Місяць: Optional[str] = ""
     Примітка: Optional[str] = ""
+    Контакти: Optional[list[dict]] = []
+
+def add_contacts(sheet, headers, row_index, contacts):
+    max_contacts = 50  # максимум 50 тріад: Контакт N, ПІБ N, Посада N
+    for contact in contacts:
+        for i in range(1, max_contacts + 1):
+            tel_col = f"Контакт {i}"
+            pib_col = f"ПІБ {i}"
+            pos_col = f"Посада {i}"
+            if tel_col in headers:
+                tel_val = sheet.cell(row_index, headers.index(tel_col)+1).value
+                if not tel_val:
+                    sheet.update_cell(row_index, headers.index(tel_col)+1, contact.get("телефон", ""))
+                    sheet.update_cell(row_index, headers.index(pib_col)+1, contact.get("ПІБ", ""))
+                    sheet.update_cell(row_index, headers.index(pos_col)+1, contact.get("посада", ""))
+                    break
+
+# Старий клас замінено
+    Назва: str
+    Область: Optional[str] = ""
+    Площа: Optional[int] = 0
+    Культура: Optional[str] = ""
+    Телефон: Optional[str] = ""
+    Потреба: Optional[str] = ""
+    Місяць: Optional[str] = ""
+    Примітка: Optional[str] = ""
 
 @app.get("/")
 def read_root():
@@ -78,6 +104,10 @@ def add_farmer(farmer: Farmer):
     headers = sheet.row_values(1)
     new_row = [getattr(farmer, col, "") for col in headers]
     sheet.append_row(new_row)
+    headers = sheet.row_values(1)
+    row_index = len(sheet.get_all_values())
+    if farmer.Контакти:
+        add_contacts(sheet, headers, row_index, farmer.Контакти)
     log_change("Додано", farmer.Назва)
     return {"message": "Фермера додано"}
 
@@ -91,6 +121,9 @@ def update_farmer(farmer: Farmer):
             for j, col in enumerate(headers):
                 if hasattr(farmer, col) and getattr(farmer, col):
                     sheet.update_cell(i + 2, j + 1, getattr(farmer, col))
+            headers = sheet.row_values(1)
+            if farmer.Контакти:
+                add_contacts(sheet, headers, i+2, farmer.Контакти)
             log_change("Оновлено", farmer.Назва)
             return {"message": "Фермера оновлено"}
     raise HTTPException(status_code=404, detail="Фермер не знайдений")
