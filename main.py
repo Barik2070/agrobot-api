@@ -1,161 +1,57 @@
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 import gspread
-import datetime
-from google.oauth2.service_account import Credentials
-
-SHEET_ID = "1akbF7aSVo4uJVQdOFfPpHfM23xrAEi_s41Do2Ki-oTo"
-SHEET_NAME = "База"
-LOG_SHEET_NAME = "Лог"
+from typing import List, Optional
+from oauth2client.service_account import ServiceAccountCredentials
 
 app = FastAPI()
 
 # Авторизація
-scopes = ['https://www.googleapis.com/auth/spreadsheets']
-creds = Credentials.from_service_account_file('/etc/secrets/credentials.json', scopes=scopes)
-client = gspread.authorize(creds)
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+credentials = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(credentials)
 
-def log_change(action: str, name: str):
-    try:
-        log_sheet = client.open_by_key(SHEET_ID).worksheet("Лог")
-    except Exception:
-        # Якщо аркуша "Лог" немає — створюємо його
-        spreadsheet = client.open_by_key(SHEET_ID)
-        spreadsheet.add_worksheet(title="Лог", rows=1000, cols=5)
-        log_sheet = spreadsheet.worksheet("Лог")
-        log_sheet.append_row(["Час", "Дія", "Фермер"])
+# Завантаження таблиці
+spreadsheet = client.open("База фермерів")
+worksheet = spreadsheet.sheet1
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_sheet.append_row([now, action, name])
-
-
-
-
-def ensure_columns_exist(sheet, required_columns):
-    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-    updated = False
-    for col in required_columns:
-        if col not in headers:
-            sheet.add_cols(1)
-            sheet.update_cell(1, len(headers) + 1, col)
-            headers.append(col)
-            updated = True
-    return headers
-
-
-# Pydantic модель
 class Farmer(BaseModel):
     Назва: str
     Область: Optional[str] = ""
-    Площа: Optional[int] = 0
+    Площа: Optional[str] = ""
     Культура: Optional[str] = ""
     Телефон: Optional[str] = ""
     Потреба: Optional[str] = ""
     Місяць: Optional[str] = ""
     Примітка: Optional[str] = ""
-    Контакти: Optional[list[dict]] = []
-
-def add_contacts(sheet, headers, row_index, contacts):
-    max_contacts = 50  # максимум 50 тріад: Контакт N, ПІБ N, Посада N
-    for contact in contacts:
-        for i in range(1, max_contacts + 1):
-            tel_col = f"Контакт {i}"
-            pib_col = f"ПІБ {i}"
-            pos_col = f"Посада {i}"
-            if tel_col in headers:
-                tel_val = sheet.cell(row_index, headers.index(tel_col)+1).value
-                if not tel_val:
-                    sheet.update_cell(row_index, headers.index(tel_col)+1, contact.get("телефон", ""))
-                    sheet.update_cell(row_index, headers.index(pib_col)+1, contact.get("ПІБ", ""))
-                    sheet.update_cell(row_index, headers.index(pos_col)+1, contact.get("посада", ""))
-                    break
-
-# Старий клас замінено
-    Назва: str
-    Область: Optional[str] = ""
-    Площа: Optional[int] = 0
-    Культура: Optional[str] = ""
-    Телефон: Optional[str] = ""
-    Потреба: Optional[str] = ""
-    Місяць: Optional[str] = ""
-    Примітка: Optional[str] = ""
-
-@app.get("/")
-def read_root():
-    return {"message": "API is running"}
-
-@app.get("/test-gsheet")
-def test_gsheet():
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    return {"first_row": sheet.row_values(1)}
-
-@app.get("/find-farmer")
-def find_farmer(name: str):
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    data = sheet.get_all_records()
-    results = [row for row in data if name.lower() in row.get("Назва", "").lower()]
-    return {"results": results}
-
-@app.get("/summary")
-def summarize():
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    data = sheet.get_all_records()
-    summary = {}
-    for row in data:
-        oblast = row.get("Область", "Невідомо")
-        summary[oblast] = summary.get(oblast, 0) + 1
-    return {"Кількість фермерів по областях": summary}
+    Контакти: Optional[List[dict]] = []
 
 @app.post("/add-farmer")
 def add_farmer(farmer: Farmer):
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    data = sheet.get_all_records()
-    for row in data:
-        if farmer.Назва.lower() == row.get("Назва", "").lower():
-            raise HTTPException(status_code=400, detail="Фермер уже існує")
-    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-    new_row = [getattr(farmer, col, "") for col in headers]
-    sheet.append_row(new_row)
-    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-    row_index = len(sheet.get_all_values())
-    if farmer.Контакти:
-        add_contacts(sheet, headers, row_index, farmer.Контакти)
-    log_change("Додано", farmer.Назва)
-    return {"message": "Фермера додано"}
+    headers = worksheet.row_values(1)
+    row = [""] * len(headers)
 
-@app.post("/update-farmer")
-def update_farmer(farmer: Farmer):
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    data = sheet.get_all_records()
-    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-    for i, row in enumerate(data):
-        if farmer.Назва.lower() == row.get("Назва", "").lower():
-            for j, col in enumerate(headers):
-                if hasattr(farmer, col) and getattr(farmer, col):
-                    sheet.update_cell(i + 2, j + 1, getattr(farmer, col))
-            required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-            if farmer.Контакти:
-                add_contacts(sheet, headers, i+2, farmer.Контакти)
-            log_change("Оновлено", farmer.Назва)
-            return {"message": "Фермера оновлено"}
-    raise HTTPException(status_code=404, detail="Фермер не знайдений")
+    # Динамічне оновлення колонок
+    incoming_data = farmer.dict()
+    for key, value in incoming_data.items():
+        if key == "Контакти":
+            for i, contact in enumerate(value):
+                for sub_key, sub_value in contact.items():
+                    col_name = f"{sub_key} {i + 1}"
+                    if col_name not in headers:
+                        worksheet.add_cols(1)
+                        worksheet.update_cell(1, len(headers) + 1, col_name)
+                        headers.append(col_name)
+                    col_index = headers.index(col_name)
+                    row[col_index] = sub_value
+        else:
+            if key not in headers:
+                worksheet.add_cols(1)
+                worksheet.update_cell(1, len(headers) + 1, key)
+                headers.append(key)
+            col_index = headers.index(key)
+            row[col_index] = value
 
-@app.post("/add-column")
-def add_column(column_name: str):
-    sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
-    required_fields = ["Назва", "Область", "Площа", "Культура", "Телефон", "Потреба", "Місяць", "Примітка"]
-    headers = ensure_columns_exist(sheet, required_fields)
-    if column_name in headers:
-        return {"message": f"Колонка '{column_name}' вже існує"}
-    try:
-        sheet.add_cols(1)
-        sheet.update_cell(1, len(headers) + 1, column_name)
-        return {"message": f"Колонку '{column_name}' успішно додано"}
-    except Exception as e:
-        return {"message": f"Не вдалося створити колонку '{column_name}': {str(e)}"}
+    worksheet.append_row(row)
+    return {"status": "Фермера додано"}
