@@ -1,0 +1,152 @@
+info:
+  description: API для GPTs-асистента з роботи з Google Таблицею клієнтів
+  title: Agrobot API
+  version: 1.0.0
+openapi: 3.1.0
+paths:
+  /add_column:
+    post:
+      operationId: addColumn
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                назва_колонки:
+                  type: string
+              required:
+              - назва_колонки
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Колонку додано
+      summary: Додати нову колонку
+  /add_row:
+    post:
+      operationId: addRow
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                контакти:
+                  type: string
+                назва:
+                  type: string
+                нотатка:
+                  type: string
+                область:
+                  type: string
+                площа:
+                  type: number
+                показники:
+                  type: string
+                район:
+                  type: string
+              required:
+              - назва
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Клієнт доданий
+      summary: Додати нового клієнта
+  /feedback:
+    post:
+      operationId: submitFeedback
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                gpt_відповідь:
+                  type: string
+                виправлення:
+                  type: string
+                запит:
+                  type: string
+                коментар:
+                  type: string
+                оцінка:
+                  type: integer
+              required:
+              - запит
+              - коментар
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Фідбек збережено
+      summary: Записати фідбек GPT
+  /log:
+    post:
+      operationId: logAction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                дія:
+                  type: string
+                назва:
+                  type: string
+                нове:
+                  type: string
+                поле:
+                  type: string
+                старе:
+                  type: string
+              required:
+              - дія
+              - назва
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Дію записано
+      summary: Записати дію до журналу
+  /report:
+    post:
+      operationId: generateReport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                фільтр:
+                  type: object
+              required:
+              - фільтр
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Результати фільтрації
+      summary: Отримати звіт за фільтром
+  /update_row:
+    post:
+      operationId: updateRow
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                ключ:
+                  type: string
+                нове_значення:
+                  type: string
+                поле:
+                  type: string
+              required:
+              - ключ
+              - поле
+              - нове_значення
+              type: object
+        required: true
+      responses:
+        '200':
+          description: Інформацію оновлено
+      summary: Оновити існуючого клієнта
+servers:
+- url: https://agrobot-api-s8uz.onrender.com

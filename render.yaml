@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: agrobot-api
+    env: python
+    buildCommand: ""
+    startCommand: bash start.sh
+    plan: free
+    runtime: python
+    region: frankfurt
+    branch: main
+    autoDeploy: true
