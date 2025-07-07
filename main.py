@@ -1,6 +1,7 @@
+
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional
 import gspread
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
@@ -30,24 +31,27 @@ class AddRowRequest(BaseModel):
 @app.post("/add_row")
 def add_row(data: AddRowRequest):
     headers = base_ws.row_values(1)
-    values = base_ws.get_all_records()
+    existing_rows = base_ws.get_all_records()
 
-    # Перевірка на дублікати
-    for row in values:
-        if row.get("Назва", "").strip().lower() == data.назва.strip().lower():
-            return {"status": "duplicate", "message": "Клієнт уже існує"}
+    # Перевірка на дублікати (по назві)
+    if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
+        return {"status": "duplicate", "message": "Клієнт уже існує"}
 
-    # Створення нового рядка
+    # Формування нового рядка
     new_row = [""] * len(headers)
-    data_dict = data.dict()
-    for key, value in data_dict.items():
-        if key in headers:
-            index = headers.index(key)
-            new_row[index] = str(value)
+    for key, value in data.dict().items():
+        normalized_key = key.capitalize()
+        if normalized_key in headers:
+            idx = headers.index(normalized_key)
+            new_row[idx] = str(value)
         elif key == "нотатка" and "Нотатки" in headers:
             new_row[headers.index("Нотатки")] = str(value)
 
-    # Додавання після останнього логічного запису
-    base_ws.append_row(new_row, value_input_option="USER_ENTERED")
-    log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, "", "", ""])
-    return {"status": "OK", "message": "Клієнта додано"}
+    # Додавання рядка після останнього логічного запису (відповідно до кількості записів)
+    insert_row_index = len(existing_rows) + 2  # +1 заголовок, +1 новий рядок
+    base_ws.insert_row(new_row, index=insert_row_index, value_input_option="USER_ENTERED")
+
+    # Логування
+    log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, data.область, data.площа, data.контакти])
+
+    return {"status": "OK", "message": f"Клієнта {data.назва} додано на рядок {insert_row_index}"}
