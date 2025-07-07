@@ -47,11 +47,10 @@ def add_row(data: AddRowRequest):
         elif key == "нотатка" and "Нотатки" in headers:
             new_row[headers.index("Нотатки")] = str(value)
 
-    # Додавання рядка після останнього логічного запису (відповідно до кількості записів)
-    insert_row_index = len(existing_rows) + 2  # +1 заголовок, +1 новий рядок
-    base_ws.insert_row(new_row, index=insert_row_index, value_input_option="USER_ENTERED")
+    # Додавання до кінця таблиці — гарантовано видно
+    base_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
     # Логування
     log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, data.область, data.площа, data.контакти])
 
-    return {"status": "OK", "message": f"Клієнта {data.назва} додано на рядок {insert_row_index}"}
+    return {"status": "OK", "message": f"Клієнта {data.назва} успішно додано"}
