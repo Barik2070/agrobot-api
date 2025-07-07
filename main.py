@@ -67,23 +67,35 @@ def add_row(data: AddRowRequest):
             idx = headers.index(mapped_key)
             new_row[idx] = str(value)
 
-    # обробка поля контакти: розділяємо на ПІБ та телефон
-    if data.контакти and contact_phone_idx is not None and contact_name_idx is not None:
-        parts = data.контакти.strip().rsplit(" ", 1)
-        if len(parts) == 2:
-            new_row[contact_name_idx] = parts[0]
-            new_row[contact_phone_idx] = parts[1]
-        else:
-            new_row[contact_phone_idx] = data.контакти
+    
+# обробка поля контакти: підтримка кількох контактів
+    if data.контакти:
+        contacts = [c.strip() for c in data.контакти.split(";") if c.strip()]
+        for i, contact_entry in enumerate(contacts[:17]):
+            # Парсимо: "ПІБ, Посада Телефон" або "ПІБ Телефон"
+            contact_parts = contact_entry.strip().rsplit(" ", 1)
+            name_and_pos = contact_parts[0]
+            phone = contact_parts[1] if len(contact_parts) > 1 else ""
 
-    for key, value in data.dict().items():
-        mapped_key = key_map.get(key)
-        if mapped_key and mapped_key in headers:
-            idx = headers.index(mapped_key)
-            new_row[idx] = str(value)
+            name_parts = name_and_pos.split(",", 1)
+            pib = name_parts[0].strip()
+            pos = name_parts[1].strip() if len(name_parts) == 2 else ""
 
-    print("🟡 Додаємо рядок до Google Sheets:", new_row)
+            if i == 0:
+                name_idx = next((j for j, h in enumerate(headers) if h.lower().strip() in ["піб", "контактна особа"]), None)
+                phone_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == "контакт"), None)
+                pos_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == "посада"), None)
+            else:
+                name_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"піб {i+1}"), None)
+                phone_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"контакт {i+1}"), None)
+                pos_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"посада {i+1}"), None)
 
+            if name_idx is not None:
+                new_row[name_idx] = pib
+            if phone_idx is not None:
+                new_row[phone_idx] = phone
+            if pos_idx is not None:
+                new_row[pos_idx] = pos
     base_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
     # Логування
