@@ -37,17 +37,26 @@ def add_row(data: AddRowRequest):
     if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
         return {"status": "duplicate", "message": "Клієнт уже існує"}
 
-    # Формування нового рядка
+    # Жорстке мапінгування ключів до назв колонок
+    key_map = {
+        "назва": "Назва",
+        "область": "Область",
+        "район": "Район",
+        "площа": "Площа",
+        "показники": "Показники",
+        "контакти": "Контакти",
+        "нотатка": "Нотатки"
+    }
+
     new_row = [""] * len(headers)
     for key, value in data.dict().items():
-        normalized_key = key.capitalize()
-        if normalized_key in headers:
-            idx = headers.index(normalized_key)
+        mapped_key = key_map.get(key)
+        if mapped_key and mapped_key in headers:
+            idx = headers.index(mapped_key)
             new_row[idx] = str(value)
-        elif key == "нотатка" and "Нотатки" in headers:
-            new_row[headers.index("Нотатки")] = str(value)
 
-    # Додавання до кінця таблиці — гарантовано видно
+    print("🟡 Додаємо рядок до Google Sheets:", new_row)  # Лог для дебагу
+
     base_ws.append_row(new_row, value_input_option="USER_ENTERED")
 
     # Логування
