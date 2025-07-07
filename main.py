@@ -37,17 +37,17 @@ def add_row(data: AddRowRequest):
     if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
         return {"status": "duplicate", "message": "Клієнт уже існує"}
 
-    # Динамічне мапінгування ключів до реальних назв колонок
-    key_map = {}
     
+    # Оновлений мапінг: ім’я та телефон окремо
+    key_map = {}
+
     possible_matches = {
-        "назва": ["назва", "компанія", "підприємство"],
+        "назва": ["назва"],
         "область": ["область"],
         "район": ["район"],
-        "площа": ["площа", "га"],
-        "показники": ["показники", "культури", "види діяльності"],
-        "контакти": ["контакт", "контакт 1", "телефон", "контактна особа"],
-        "нотатка": ["нотатка", "примітка"]
+        "площа": ["площа"],
+        "показники": ["показники"],
+        "нотатка": ["нотатка"]
     }
 
     for key, options in possible_matches.items():
@@ -56,7 +56,26 @@ def add_row(data: AddRowRequest):
                 key_map[key] = header
                 break
 
+    # обробка контактів окремо
+    contact_phone_idx = next((i for i, h in enumerate(headers) if h.lower().strip() == "контакт"), None)
+    contact_name_idx = next((i for i, h in enumerate(headers) if h.lower().strip() in ["піб", "контактна особа"]), None)
+
     new_row = [""] * len(headers)
+    for key, value in data.dict().items():
+        mapped_key = key_map.get(key)
+        if mapped_key and mapped_key in headers:
+            idx = headers.index(mapped_key)
+            new_row[idx] = str(value)
+
+    # обробка поля контакти: розділяємо на ПІБ та телефон
+    if data.контакти and contact_phone_idx is not None and contact_name_idx is not None:
+        parts = data.контакти.strip().rsplit(" ", 1)
+        if len(parts) == 2:
+            new_row[contact_name_idx] = parts[0]
+            new_row[contact_phone_idx] = parts[1]
+        else:
+            new_row[contact_phone_idx] = data.контакти
+
     for key, value in data.dict().items():
         mapped_key = key_map.get(key)
         if mapped_key and mapped_key in headers:
