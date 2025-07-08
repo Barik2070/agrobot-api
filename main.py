@@ -1,110 +1,181 @@
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 import gspread
-from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
-
-# Авторизація Google Sheets
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("google-credentials.json", scope)
-client = gspread.authorize(creds)
-
-# Відкриваємо таблиці
-sheet = client.open_by_url("https://docs.google.com/spreadsheets/d/1akbF7aSVo4uJVQdOFfPpHfM23xrAEi_s41Do2Ki-oTo/edit")
-base_ws = sheet.worksheet("База")
-log_ws = sheet.worksheet("Лог")
-feedback_ws = sheet.worksheet("GPT_Feedback")
+from typing import Optional, List
+import re
+import os
 
 app = FastAPI()
 
-class AddRowRequest(BaseModel):
-    назва: str
-    область: Optional[str] = ""
-    район: Optional[str] = ""
-    площа: Optional[float] = 0
-    показники: Optional[str] = ""
-    контакти: Optional[str] = ""
-    нотатка: Optional[str] = ""
+# Авторизація Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+credentials = ServiceAccountCredentials.from_json_keyfile_name("google-credentials.json", scope)
+client = gspread.authorize(credentials)
 
-@app.post("/add_row")
-def add_row(data: AddRowRequest):
-    headers = [h.strip() for h in base_ws.row_values(1)]
-    existing_rows = base_ws.get_all_records()
+SPREADSHEET_NAME = "База"
+SHEET_BASE = "База"
+SHEET_LOG = "Лог"
 
-    # Запобігання дублікатам
-    if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
-        return {"status": "duplicate", "message": "Клієнт уже існує"}
+sheet = client.open(SPREADSHEET_NAME)
 
-    # Підготовка мапінгу
-    key_map = {}
-    possible_matches = {
-        "назва": ["назва"],
-        "область": ["область"],
-        "район": ["район"],
-        "площа": ["площа"],
-        "показники": ["показники"],
-        "нотатка": ["нотатка"]
-    }
-    for key, options in possible_matches.items():
-        for header in headers:
-            if header.lower() in options:
-                key_map[key] = header
-                break
+class Client(BaseModel):
+    edrpou: Optional[str] = ""
+    name: str
+    region: Optional[str] = ""
+    district: Optional[str] = ""
+    crop: Optional[str] = ""
+    area: Optional[str] = ""
+    contacts: Optional[str] = ""
+    note: Optional[str] = ""
 
-    # Підготовка нового рядка
-    new_row = [""] * len(headers)
-    for key, value in data.dict().items():
-        mapped_key = key_map.get(key)
-        if mapped_key and mapped_key in headers:
-            idx = headers.index(mapped_key)
-            new_row[idx] = str(value)
+# --- Сервісні функції ---
+def get_headers():
+    try:
+        return sheet.worksheet(SHEET_BASE).row_values(1)
+    except:
+        return []
 
-    # Обробка контактів
-    if data.контакти:
-        contacts = [c.strip() for c in data.контакти.split(";") if c.strip()]
-        for i, contact_entry in enumerate(contacts[:17]):
-            contact_parts = contact_entry.strip().rsplit(" ", 1)
-            name_and_pos = contact_parts[0]
-            phone = contact_parts[1] if len(contact_parts) > 1 else ""
+def normalize_header(header):
+    return header.strip().lower().replace("_", " ")
 
-            name_parts = name_and_pos.split(",", 1)
-            pib = name_parts[0].strip()
-            pos = name_parts[1].strip() if len(name_parts) == 2 else ""
+def ensure_column_exists(column_name):
+    headers = get_headers()
+    if column_name not in headers:
+        sheet.worksheet(SHEET_BASE).add_cols(1)
+        sheet.worksheet(SHEET_BASE).update_cell(1, len(headers)+1, column_name)
 
-            if i == 0:
-                name_idx = next((j for j, h in enumerate(headers) if h.lower().strip() in ["піб", "контактна особа"]), None)
-                phone_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == "контакт"), None)
-                pos_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == "посада"), None)
+def parse_contacts(raw):
+    result = {}
+    contacts = [c.strip() for c in raw.split(";") if c.strip()]
+    for i, contact in enumerate(contacts):
+        name, phone, title = "", "", ""
+        parts = contact.split(",")
+        for part in parts:
+            part = part.strip()
+            if re.search(r"\d{7,}", part):
+                phone = part
+            elif any(k in part.lower() for k in ["дир", "менедж", "голов"]):
+                title = part
             else:
-                name_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"піб {i+1}"), None)
-                phone_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"контакт {i+1}"), None)
-                pos_idx = next((j for j, h in enumerate(headers) if h.lower().strip() == f"посада {i+1}"), None)
+                name = part
+        result[f"ПІБ {i+1}"] = name
+        result[f"Контакт {i+1}"] = phone
+        result[f"Посада {i+1}"] = title
+    return result
 
-            if name_idx is not None:
-                new_row[name_idx] = pib
-            if phone_idx is not None:
-                new_row[phone_idx] = phone
-            if pos_idx is not None:
-                new_row[pos_idx] = pos
+def find_row_by_name_or_edrpou(name, edrpou):
+    values = sheet.worksheet(SHEET_BASE).get_all_values()
+    headers = get_headers()
+    try:
+        name_idx = headers.index("Назва")
+    except ValueError:
+        return None
+    edrpou_idx = headers.index("ЄДРПОУ") if "ЄДРПОУ" in headers else -1
+    for i, row in enumerate(values[1:], start=2):
+        if name.lower() in row[name_idx].lower() or (edrpou and edrpou_idx != -1 and edrpou == row[edrpou_idx]):
+            return i
+    return None
 
-    base_ws.append_row(new_row, value_input_option="USER_ENTERED")
-    log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, data.область, data.площа, data.контакти])
-    return {"status": "OK", "message": f"Клієнта {data.назва} успішно додано"}
+def get_next_row():
+    data = sheet.worksheet(SHEET_BASE).get_all_values()
+    return len(data) + 1
 
-class ReportRequest(BaseModel):
-    область: Optional[str] = None
+# --- Ендпоінти ---
+@app.post("/add_or_update_client")
+def add_or_update_client(client_data: Client):
+    ws = sheet.worksheet(SHEET_BASE)
+    headers = get_headers()
 
-@app.post("/report")
-def report(data: ReportRequest):
-    headers = base_ws.row_values(1)
-    rows = base_ws.get_all_records()
-    filtered = []
+    # Забезпечити наявність всіх колонок
+    base_fields = ["ЄДРПОУ", "Назва", "Область", "Район", "Види діяльності", "Площа", "нотатка"]
+    for base in base_fields:
+        ensure_column_exists(base)
 
-    if data.область:
-        for row in rows:
-            if row.get("Область", "").strip().lower() == data.область.strip().lower():
-                filtered.append(row)
+    contact_dict = parse_contacts(client_data.contacts or "")
+    for col in contact_dict:
+        ensure_column_exists(col)
 
-    return {"results": filtered}
+    headers = get_headers()
+    row_data = [""] * len(headers)
+
+    for field in base_fields:
+        if field == "ЄДРПОУ":
+            val = client_data.edrpou
+        elif field == "Назва":
+            val = client_data.name
+        elif field == "Область":
+            val = client_data.region
+        elif field == "Район":
+            val = client_data.district
+        elif field == "Види діяльності":
+            val = client_data.crop
+        elif field == "Площа":
+            val = client_data.area
+        elif field == "нотатка":
+            val = client_data.note
+        else:
+            val = ""
+        try:
+            idx = headers.index(field)
+            row_data[idx] = val
+        except:
+            continue
+
+    for key, val in contact_dict.items():
+        try:
+            idx = headers.index(key)
+            row_data[idx] = val
+        except:
+            continue
+
+    row_number = find_row_by_name_or_edrpou(client_data.name, client_data.edrpou)
+    if row_number:
+        ws.update(f"A{row_number}:{chr(65+len(row_data)-1)}{row_number}", [row_data])
+    else:
+        ws.insert_row(row_data, get_next_row())
+
+    # Лог
+    sheet.worksheet(SHEET_LOG).append_row([client_data.name, client_data.region, client_data.crop, client_data.note])
+    return {"status": "ok"}
+
+@app.get("/list_columns")
+def list_columns():
+    return {"columns": get_headers()}
+
+@app.get("/get_client_by_partial_name")
+def get_client_by_partial_name(q: str):
+    ws = sheet.worksheet(SHEET_BASE)
+    all_data = ws.get_all_records()
+    matches = [row for row in all_data if q.lower() in row.get("Назва", "").lower()]
+    return {"results": matches}
+
+@app.post("/delete_client")
+def delete_client(name: str):
+    ws = sheet.worksheet(SHEET_BASE)
+    data = ws.get_all_values()
+    headers = data[0]
+    try:
+        idx = headers.index("Назва")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Колонка 'Назва' не знайдена")
+    for i, row in enumerate(data[1:], start=2):
+        if name.lower() in row[idx].lower():
+            ws.delete_rows(i)
+            return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Не знайдено")
+
+@app.get("/search_clients")
+def search_clients(region: Optional[str] = "", district: Optional[str] = "", crop: Optional[str] = ""):
+    ws = sheet.worksheet(SHEET_BASE)
+    all_data = ws.get_all_records()
+    results = []
+    for row in all_data:
+        if region and region.lower() not in row.get("Область", "").lower():
+            continue
+        if district and district.lower() not in row.get("Район", "").lower():
+            continue
+        if crop and crop.lower() not in row.get("Види діяльності", "").lower():
+            continue
+        results.append(row)
+    return {"results": results}
