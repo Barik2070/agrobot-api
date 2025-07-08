@@ -106,24 +106,32 @@ paths:
         '200':
           description: Дію записано
       summary: Записати дію до журналу
+
   /report:
     post:
-      operationId: generateReport
+      summary: Отримати звіт по клієнтах за областю
+      operationId: getClientsByRegion
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              properties:
-                фільтр:
-                  type: object
-              required:
-              - фільтр
               type: object
-        required: true
+              properties:
+                область:
+                  type: string
+                  description: Назва області (наприклад, "Миколаївська")
+              required:
+                - область
       responses:
         '200':
-          description: Результати фільтрації
-      summary: Отримати звіт за фільтром
+          description: Список клієнтів з бази
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
   /update_row:
     post:
       operationId: updateRow
