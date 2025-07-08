@@ -30,12 +30,14 @@ class AddRowRequest(BaseModel):
 
 @app.post("/add_row")
 def add_row(data: AddRowRequest):
-    headers = base_ws.row_values(1)
+    headers = [h.strip() for h in base_ws.row_values(1)]
     existing_rows = base_ws.get_all_records()
 
+    # Запобігання дублікатам
     if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
         return {"status": "duplicate", "message": "Клієнт уже існує"}
 
+    # Підготовка мапінгу
     key_map = {}
     possible_matches = {
         "назва": ["назва"],
@@ -45,16 +47,13 @@ def add_row(data: AddRowRequest):
         "показники": ["показники"],
         "нотатка": ["нотатка"]
     }
-
     for key, options in possible_matches.items():
         for header in headers:
             if header.lower() in options:
                 key_map[key] = header
                 break
 
-    contact_phone_idx = next((i for i, h in enumerate(headers) if h.lower().strip() == "контакт"), None)
-    contact_name_idx = next((i for i, h in enumerate(headers) if h.lower().strip() in ["піб", "контактна особа"]), None)
-
+    # Підготовка нового рядка
     new_row = [""] * len(headers)
     for key, value in data.dict().items():
         mapped_key = key_map.get(key)
@@ -62,6 +61,7 @@ def add_row(data: AddRowRequest):
             idx = headers.index(mapped_key)
             new_row[idx] = str(value)
 
+    # Обробка контактів
     if data.контакти:
         contacts = [c.strip() for c in data.контакти.split(";") if c.strip()]
         for i, contact_entry in enumerate(contacts[:17]):
@@ -93,7 +93,6 @@ def add_row(data: AddRowRequest):
     log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, data.область, data.площа, data.контакти])
     return {"status": "OK", "message": f"Клієнта {data.назва} успішно додано"}
 
-# Новий ендпоінт для звітів
 class ReportRequest(BaseModel):
     область: Optional[str] = None
 
