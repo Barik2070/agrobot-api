@@ -33,14 +33,10 @@ def add_row(data: AddRowRequest):
     headers = base_ws.row_values(1)
     existing_rows = base_ws.get_all_records()
 
-    # Перевірка на дублікати (по назві)
     if any(row.get("Назва", "").strip().lower() == data.назва.strip().lower() for row in existing_rows):
         return {"status": "duplicate", "message": "Клієнт уже існує"}
 
-    
-    # Оновлений мапінг: ім’я та телефон окремо
     key_map = {}
-
     possible_matches = {
         "назва": ["назва"],
         "область": ["область"],
@@ -56,7 +52,6 @@ def add_row(data: AddRowRequest):
                 key_map[key] = header
                 break
 
-    # обробка контактів окремо
     contact_phone_idx = next((i for i, h in enumerate(headers) if h.lower().strip() == "контакт"), None)
     contact_name_idx = next((i for i, h in enumerate(headers) if h.lower().strip() in ["піб", "контактна особа"]), None)
 
@@ -67,12 +62,9 @@ def add_row(data: AddRowRequest):
             idx = headers.index(mapped_key)
             new_row[idx] = str(value)
 
-    
-# обробка поля контакти: підтримка кількох контактів
     if data.контакти:
         contacts = [c.strip() for c in data.контакти.split(";") if c.strip()]
         for i, contact_entry in enumerate(contacts[:17]):
-            # Парсимо: "ПІБ, Посада Телефон" або "ПІБ Телефон"
             contact_parts = contact_entry.strip().rsplit(" ", 1)
             name_and_pos = contact_parts[0]
             phone = contact_parts[1] if len(contact_parts) > 1 else ""
@@ -96,9 +88,24 @@ def add_row(data: AddRowRequest):
                 new_row[phone_idx] = phone
             if pos_idx is not None:
                 new_row[pos_idx] = pos
+
     base_ws.append_row(new_row, value_input_option="USER_ENTERED")
-
-    # Логування
     log_ws.append_row([datetime.now().isoformat(), "Додано", data.назва, data.область, data.площа, data.контакти])
-
     return {"status": "OK", "message": f"Клієнта {data.назва} успішно додано"}
+
+# Новий ендпоінт для звітів
+class ReportRequest(BaseModel):
+    область: Optional[str] = None
+
+@app.post("/report")
+def report(data: ReportRequest):
+    headers = base_ws.row_values(1)
+    rows = base_ws.get_all_records()
+    filtered = []
+
+    if data.область:
+        for row in rows:
+            if row.get("Область", "").strip().lower() == data.область.strip().lower():
+                filtered.append(row)
+
+    return {"results": filtered}
